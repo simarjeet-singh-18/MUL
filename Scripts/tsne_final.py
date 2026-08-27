@@ -64,7 +64,7 @@ else:
 
 
 test_dataset = torchvision.datasets.CIFAR10(
-    root="/export/home/achyut/Simarjeet/MUL/Datasets/cifar10",
+    root="MUL/Datasets/cifar10",
     train=False,
     download=True,
     transform=transform_test
@@ -101,7 +101,7 @@ teacher.fc = nn.Linear(
 
 teacher.load_state_dict(
     torch.load(
-        f"/export/home/achyut/Simarjeet/MUL/Models/Teachers/cifar10/teacher_im{imb_factor}.pth",
+        f"MUL/Models/Teachers/cifar10/teacher_im{imb_factor}.pth",
         map_location=device
     )
 )
@@ -137,7 +137,7 @@ student.fc = nn.Linear(
 student = student.to(device)
 student.load_state_dict(
     torch.load(
-        f"/export/home/achyut/Simarjeet/MUL/Models/Students/cifar10/manual/nor_im{imb_factor}_clshead.pth",
+        f"MUL/Models/Students/cifar10/manual/nor_im{imb_factor}_clshead.pth",
         map_location=device
     )
 )
@@ -168,7 +168,7 @@ student_imp.fc = nn.Linear(
 student_imp = student_imp.to(device)
 student_imp.load_state_dict(
     torch.load(
-        f"/export/home/achyut/Simarjeet/MUL/Models/Students/cifar10/manual/imp_im{imb_factor}_clshead.pth",
+        f"MUL/Models/Students/cifar10/manual/imp_im{imb_factor}_clshead.pth",
         map_location=device
     )
 )
@@ -199,7 +199,7 @@ oracle.fc = nn.Linear(
 oracle = oracle.to(device)
 oracle.load_state_dict(
     torch.load(
-        f"/export/home/achyut/Simarjeet/MUL/Models/Oracles/cifar10/orcl_im{imb_factor}_clshead.pth",
+        f"MUL/Models/Oracles/cifar10/orcl_im{imb_factor}_clshead.pth",
         map_location=device
     )
 )
@@ -227,7 +227,7 @@ neggrad.fc = nn.Linear(
 neggrad = neggrad.to(device)
 neggrad.load_state_dict(
     torch.load(
-        f"/export/home/achyut/Simarjeet/MUL/Models/Neggrad/cifar10/neggrad_im{imb_factor}_clshead.pth",
+        f"MUL/Models/Neggrad/cifar10/neggrad_im{imb_factor}_clshead.pth",
         map_location=device
     )
 )
@@ -255,7 +255,7 @@ dtd.fc = nn.Linear(
 dtd = dtd.to(device)
 dtd.load_state_dict(
     torch.load(
-        f"/export/home/achyut/Simarjeet/MUL/Models/DTD/cifar10/dtd_im{imb_factor}_clshead.pth",
+        f"MUL/Models/DTD/cifar10/dtd_im{imb_factor}_clshead.pth",
         map_location=device
     )
 )
@@ -283,7 +283,7 @@ lcodec.fc = nn.Linear(
 lcodec = lcodec.to(device)
 lcodec.load_state_dict(
     torch.load(
-        f"/export/home/achyut/Simarjeet/MUL/Models/Students/cifar10/manual/lcodec_im{imb_factor}_clshead.pth",
+        f"MUL/Models/Students/cifar10/manual/lcodec_im{imb_factor}_clshead.pth",
         map_location=device
     )
 )
@@ -311,7 +311,7 @@ ul.fc = nn.Linear(
 ul = ul.to(device)
 ul.load_state_dict(
     torch.load(
-        f"/export/home/achyut/Simarjeet/MUL/Models/Students/cifar10/manual/ul_im{imb_factor}_clshead.pth",
+        f"MUL/Models/Students/cifar10/manual/ul_im{imb_factor}_clshead.pth",
         map_location=device
     )
 )
@@ -339,24 +339,17 @@ scrub.fc = nn.Linear(
 scrub = scrub.to(device)
 scrub.load_state_dict(
     torch.load(
-        f"/export/home/achyut/Simarjeet/MUL/Models/Students/cifar10/manual/scrub_im{imb_factor}_clshead.pth",
+        f"MUL/Models/Students/cifar10/manual/scrub_im{imb_factor}_clshead.pth",
         map_location=device
     )
 )
 
-# ============================================================
-# t-SNE VISUALIZATION
-# TEACHER vs STUDENT
-# ============================================================
 
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import numpy as np
 
-# ============================================================
-# SETTINGS
-# ============================================================
 
 num_samples = 2000
 
@@ -372,10 +365,6 @@ classes = [
     "ship",
     "truck"
 ]
-
-# ============================================================
-# FEATURE EXTRACTOR
-# ============================================================
 
 class FeatureExtractor(torch.nn.Module):
 
@@ -394,10 +383,6 @@ class FeatureExtractor(torch.nn.Module):
         x = torch.flatten(x, 1)
 
         return x
-
-# ============================================================
-# CREATE FEATURE MODELS
-# ============================================================
 
 teacher_feature_model = FeatureExtractor(teacher).to(device)
 student_feature_model = FeatureExtractor(student).to(device)
@@ -420,10 +405,6 @@ lcodec_feature_model.eval()
 ul_feature_model.eval()
 scrub_feature_model.eval()
 
-# ============================================================
-# STORAGE
-# ============================================================
-
 teacher_features = []
 student_features = []
 student_imp_features = []
@@ -434,10 +415,6 @@ lcodec_features = []
 ul_features = []
 scrub_features = []
 all_labels = []
-
-# ============================================================
-# EXTRACT FEATURES
-# ============================================================
 
 count = 0
 
@@ -499,10 +476,6 @@ with torch.no_grad():
 
         if count >= num_samples:
             break
-
-# ============================================================
-# CONCATENATE
-# ============================================================
 
 teacher_features = torch.cat(
     teacher_features,
@@ -568,9 +541,6 @@ all_labels = all_labels.numpy()
 
 print("Feature extraction complete")
 
-# ============================================================
-# t-SNE
-# ============================================================
 
 print("Running Teacher t-SNE...")
 
@@ -646,17 +616,10 @@ scrub_tsne = TSNE(
 
 print("t-SNE complete")
 
-# ============================================================
-# PLOT  (top row 5 panels, bottom row 4 panels centered)
-# ============================================================
-
 fig = plt.figure(figsize=(40, 16))
 
-# 2 rows x 10 half-columns so the 4 bottom panels can be offset by
-# half a cell and sit centered beneath the 5 top panels.
 gs = GridSpec(2, 10, figure=fig)
 
-# (tsne_data, title, row, half-col start)
 panel_specs = [
     (teacher_tsne,     "Target",   0, 0),
     (student_tsne,     "KD-Based", 0, 2),
@@ -700,9 +663,6 @@ for data, title, row, cstart in panel_specs:
         labelsize=17
     )
 
-# ============================================================
-# LEGEND
-# ============================================================
 
 handles, labels_legend = first_ax.get_legend_handles_labels()
 
@@ -716,10 +676,10 @@ class_legend = fig.legend(
     markerscale=4
 )
 
-fig.add_artist(class_legend)  # keep the class legend from being overwritten
+fig.add_artist(class_legend) 
 
 imb_handle = [
-    plt.Line2D([0], [0], linestyle='none')  # invisible handle
+    plt.Line2D([0], [0], linestyle='none')  
 ]
 
 imb_legend = fig.legend(
@@ -732,9 +692,6 @@ imb_legend = fig.legend(
     handlelength=0,
     handletextpad=0
 )
-# ============================================================
-# SPACING
-# ============================================================
 
 plt.subplots_adjust(
     top=0.85,
@@ -742,12 +699,8 @@ plt.subplots_adjust(
     hspace=0.30
 )
 
-# ============================================================
-# SAVE
-# ============================================================
-
 plt.savefig(
-    f"/export/home/achyut/Simarjeet/tsne_im{imb_factor}_{forget_group.lower()}.png",
+    f"tsne_im{imb_factor}_{forget_group.lower()}.png",
     dpi=300,
     bbox_inches="tight"
 )

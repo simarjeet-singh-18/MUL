@@ -19,28 +19,21 @@ import matplotlib.pyplot as plt
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-# ============================================================
-# CONFIG
-# ============================================================
-
 num_classes  = 101
-forget_class = 2         # match the 'clshead' checkpoints (food101 head == class 0)
+forget_class = 2         
 counter = 0
 wait = 2
 
-# ---- Fill in each model's checkpoint path here ----
-# Leave a path as "" to leave that panel blank.
-target_path          = "/export/home/achyut/Simarjeet/MUL/Models/Teachers/food101/teacher_im200.pth"          # Target (teacher)
-normal_method_path   = "/export/home/achyut/Simarjeet/MUL/Models/Students/food101/manual/nor_im200_clshead.pth"    # KD-Based  (im200 to match the rest)
-proposed_method_path = "/export/home/achyut/Simarjeet/MUL/Models/Students/food101/manual/imp_im200_clshead.pth"    # Proposed
-oracle_path          = "/export/home/achyut/Simarjeet/MUL/Models/Oracles/food101/orcl_im200_clshead.pth"           # Oracle
-neggrad_path         = "/export/home/achyut/Simarjeet/MUL/Models/Neggrad/food101/neggrad_im200_clshead.pth"        # Neggrad
-dtd_path             = "/export/home/achyut/Simarjeet/MUL/Models/DTD/food101/dtd_im200_clshead.pth"                # DTD
-lcodec_path          = "/export/home/achyut/Simarjeet/MUL/Models/Students/food101/manual/lcodec_im200_clshead.pth" # LCodec
-ul_path              = "/export/home/achyut/Simarjeet/MUL/Models/Students/food101/manual/ul_im200_clshead.pth"     # UL
-scrub_path           = "/export/home/achyut/Simarjeet/MUL/Models/Students/food101/manual/scrub_im200_clshead.pth"  # Scrub
+target_path          = "MUL/Models/Teachers/food101/teacher_im200.pth"                
+normal_method_path   = "MUL/Models/Students/food101/manual/nor_im200_clshead.pth"    
+proposed_method_path = "MUL/Models/Students/food101/manual/imp_im200_clshead.pth"    
+oracle_path          = "MUL/Models/Oracles/food101/orcl_im200_clshead.pth"           
+neggrad_path         = "MUL/Models/Neggrad/food101/neggrad_im200_clshead.pth"        
+dtd_path             = "MUL/Models/DTD/food101/dtd_im200_clshead.pth"                
+lcodec_path          = "MUL/Models/Students/food101/manual/lcodec_im200_clshead.pth" 
+ul_path              = "MUL/Models/Students/food101/manual/ul_im200_clshead.pth"     
+scrub_path           = "MUL/Models/Students/food101/manual/scrub_im200_clshead.pth"  
 
-# Grid layout (row-major)
 model_specs = [
     ("Target",   target_path),
     ("Oracle",   oracle_path),
@@ -50,14 +43,10 @@ model_specs = [
     ("DTD",      dtd_path),
     ("LCodec",   lcodec_path),
     ("UL",       ul_path),
-    ("Scrub",    scrub_path),          # <-- fixed: was ul_path
+    ("Scrub",    scrub_path),        
 ]
 
 n_rows, n_cols = 1, 9
-
-# ============================================================
-# DATASET
-# ============================================================
 
 transform_test = transforms.Compose([
     transforms.Resize(256),
@@ -67,18 +56,13 @@ transform_test = transforms.Compose([
 ])
 
 test_dataset = torchvision.datasets.ImageFolder(
-    root="/export/home/achyut/Simarjeet/MUL/Datasets/food101/food-101/split/val",
+    root="MUL/Datasets/food101/food-101/split/val",
     transform=transform_test
 )
 
-# Food-101 class names (alphabetical == ImageFolder order)
 classes = test_dataset.classes
 
 print(f"Forget class: {classes[forget_class]}")
-
-# ============================================================
-# LOAD MODELS
-# ============================================================
 
 def load_resnet50(ckpt_path, name):
     model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
@@ -91,9 +75,6 @@ def load_resnet50(ckpt_path, name):
     model.eval()
     return model
 
-# ============================================================
-# GRAD-CAM CLASS
-# ============================================================
 
 class GradCAM:
 
@@ -125,9 +106,6 @@ class GradCAM:
 
         self.model.zero_grad()
 
-        # The oracle has a (num_classes - 1) head: the forget class was removed, so
-        # there is no logit for it. Target the oracle's own top prediction instead
-        # (i.e. visualize where it looks when it can't choose the forgotten class).
         tgt = output.argmax(1).item() if oracle else target_class
         target = output[0, tgt]
 
@@ -155,20 +133,17 @@ class GradCAM:
 
         cam -= cam.min()
 
-        cam /= (cam.max() + 1e-8)   # guard against divide-by-zero
+        cam /= (cam.max() + 1e-8) 
 
         cam = cam.detach().cpu().numpy()
 
-        cam = np.nan_to_num(cam, nan=0.0)   # kill any residual NaNs
+        cam = np.nan_to_num(cam, nan=0.0) 
 
         return cam
 
-# ============================================================
-# LOAD ALL MODELS THAT HAVE A PATH + BUILD A GRAD-CAM FOR EACH
-# ============================================================
 
 print("\nLoading models...")
-models_list = []   # list of (name, model_or_None, gradcam_or_None)
+models_list = []
 for name, path in model_specs:
     if path:
         print(f"Loading: {name}")
@@ -276,6 +251,6 @@ for ax, (name, model, gradcam) in zip(axes, models_list):
 plt.tight_layout()
 
 # save BEFORE show (show clears the figure, so savefig-after gives a blank file)
-plt.savefig("/export/home/achyut/Simarjeet/gradcam.png")
+plt.savefig("gradcam.png")
 
 plt.show()

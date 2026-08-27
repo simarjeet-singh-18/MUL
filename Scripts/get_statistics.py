@@ -27,30 +27,30 @@ test_data_type = "lt" # uniform or lt
 if dataset == "cifar10":
     NUM_CLASSES = 10
     if test_data_type == "uniform":
-        TEST_DATA = "/export/home/achyut/Simarjeet/MUL/Datasets/cifar10"
+        TEST_DATA = ""
     elif test_data_type == "lt":
-        TEST_DATA = "/export/home/achyut/Simarjeet/MUL/Datasets/cifar10/Generated/test_lt_cifar10.pt"
+        TEST_DATA = ""
 elif dataset == "cifar100":
     NUM_CLASSES = 100
     if test_data_type == "uniform":
-        TEST_DATA = "/export/home/achyut/Simarjeet/MUL/Datasets/cifar100"
+        TEST_DATA = ""
     elif test_data_type == "lt":
-        TEST_DATA = "/export/home/achyut/Simarjeet/MUL/Datasets/cifar100/Generated/test_lt_cifar100_im200.pt"
+        TEST_DATA = ""
 elif dataset == "food101":
     NUM_CLASSES = 101
     if test_data_type == "uniform":
-        TEST_DATA = "/export/home/achyut/Simarjeet/MUL/Datasets/food101/split/val"
+        TEST_DATA = ""
     elif test_data_type == "lt":
-        TEST_DATA = f"/export/home/achyut/Simarjeet/MUL/Datasets/food101/split/val_im{imb_factor}"
+        TEST_DATA = f""
 elif dataset == "places365":
     NUM_CLASSES = 365
     if test_data_type == "uniform":
-        TEST_DATA = "/export/home/achyut/Simarjeet/MUL/Datasets/places365/lt/val"
+        TEST_DATA = ""
     elif test_data_type == "lt":
-        TEST_DATA = f"/export/home/achyut/Simarjeet/MUL/Datasets/places365/lt/val_im{imb_factor}"
+        TEST_DATA = f""
 
-TEACHER_PATH = f"/export/home/achyut/Simarjeet/MUL/Models/Teachers/{dataset}/teacher_im{imb_factor}.pth"
-PLOT_DIR = f"/export/home/achyut/Simarjeet/MUL/Plots/{dataset}/statistics/"
+TEACHER_PATH = f""
+PLOT_DIR = f""
 
 learning_rate = 0.001
 batch_size = 32

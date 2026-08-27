@@ -9,36 +9,36 @@ from torch.utils.data import Dataset, DataLoader, Subset
 
 def process_args(dataset, imb_factor, forget_class, clustering_type, pipeline):
     if dataset == "cifar10":
-        TRAIN_DATA = f"/export/home/achyut/Simarjeet/MUL/Datasets/cifar10/Generated/cifar10_lt_im{imb_factor}.pt"
-        TEST_DATA = "/export/home/achyut/Simarjeet/MUL/Datasets/cifar10"
+        TRAIN_DATA = f"MUL/Datasets/cifar10/Generated/cifar10_lt_im{imb_factor}.pt"
+        TEST_DATA = "MUL/Datasets/cifar10"
         num_classes = 10
         num_epochs = 15
     elif dataset == "cifar100":
-        TRAIN_DATA = f"/export/home/achyut/Simarjeet/MUL/Datasets/cifar100/Generated/cifar100_lt_im{imb_factor}.pt"
-        TEST_DATA = "/export/home/achyut/Simarjeet/MUL/Datasets/cifar100"
+        TRAIN_DATA = f"MUL/Datasets/cifar100/Generated/cifar100_lt_im{imb_factor}.pt"
+        TEST_DATA = "MUL/Datasets/cifar100"
         num_classes = 100
         num_epochs = 30
     elif dataset == "food101":
-        TRAIN_DATA = f"/export/home/achyut/Simarjeet/MUL/Datasets/food101/food-101/split/train_im{imb_factor}"
-        TEST_DATA = "/export/home/achyut/Simarjeet/MUL/Datasets/food101/food-101/split/val"
+        TRAIN_DATA = f"MUL/Datasets/food101/food-101/split/train_im{imb_factor}"
+        TEST_DATA = "MUL/Datasets/food101/food-101/split/val"
         num_classes = 101
         num_epochs = 30
     elif dataset == "places365":
-        TRAIN_DATA = f"/export/home/achyut/Simarjeet/MUL/Datasets/places365/lt/train_im{imb_factor}"
-        TEST_DATA = "/export/home/achyut/Simarjeet/MUL/Datasets/places365/lt/val"
+        TRAIN_DATA = f"MUL/Datasets/places365/lt/train_im{imb_factor}"
+        TEST_DATA = "MUL/Datasets/places365/lt/val"
         num_classes = 365
         num_epochs = 30
     
-    TEACHER_PATH = f"/export/home/achyut/Simarjeet/MUL/Models/Teachers/{dataset}/teacher_im{imb_factor}.pth"
-    STUDENT_SAVE_DIR = f"/export/home/achyut/Simarjeet/MUL/Models/Students/{dataset}/{clustering_type}/{pipeline}_im{imb_factor}_cls{forget_class}.pth"
+    TEACHER_PATH = f"MUL/Models/Teachers/{dataset}/teacher_im{imb_factor}.pth"
+    STUDENT_SAVE_DIR = f"MUL/Models/Students/{dataset}/{clustering_type}/{pipeline}_im{imb_factor}_cls{forget_class}.pth"
 
-    P_AVG_PLOT_DIR = f"/export/home/achyut/Simarjeet/MUL/Plots/{dataset}/{clustering_type}/p_avg_im{imb_factor}_cls{forget_class}.png"
-    P_K_BAR_PLOT_DIR = f"/export/home/achyut/Simarjeet/MUL/Plots/{dataset}/{clustering_type}/p_k_bar_im{imb_factor}_cls{forget_class}.png"
+    P_AVG_PLOT_DIR = f"MUL/Plots/{dataset}/{clustering_type}/p_avg_im{imb_factor}_cls{forget_class}.png"
+    P_K_BAR_PLOT_DIR = f"MUL/Plots/{dataset}/{clustering_type}/p_k_bar_im{imb_factor}_cls{forget_class}.png"
     
     ORACLE_SAVE_PATH = ""
     
     if pipeline == "orcl":
-        ORACLE_SAVE_PATH = f"/export/home/achyut/Simarjeet/MUL/Models/Oracles/{dataset}/{pipeline}_im{imb_factor}_cls{forget_class}.pth"
+        ORACLE_SAVE_PATH = f"MUL/Models/Oracles/{dataset}/{pipeline}_im{imb_factor}_cls{forget_class}.pth"
         
 
     return TRAIN_DATA, TEST_DATA, num_classes, num_epochs, TEACHER_PATH, STUDENT_SAVE_DIR, ORACLE_SAVE_PATH, P_AVG_PLOT_DIR, P_K_BAR_PLOT_DIR

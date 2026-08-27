@@ -25,13 +25,6 @@ def get_forget_retain_splits(
     seed=42,
     dataset="cifar100"
 ):
-    """
-    Returns:
-        forget_train, forget_val, forget_test
-        retain_train, retain_val, retain_test
-    """
-    
-    # Make transforms for particular datasets
     if dataset == "cifar10":
         
         transform_train = transforms.Compose([
@@ -114,8 +107,7 @@ def get_forget_retain_splits(
             )
         ])
     
-    # Load datasets
-    
+      
     if dataset == "cifar10" or dataset == "cifar100":
 
         _dataset = SavedDataset(
@@ -158,11 +150,9 @@ def get_forget_retain_splits(
     targets = np.array(_dataset.targets)
     targets_test = np.array(dataset_test.targets)
 
-    # Forget samples
     forget_idx = np.where(targets == forget_class)[0]
     forget_idx_test = np.where(targets_test == forget_class)[0]
 
-    # Retain samples
     retain_idx = np.where(targets != forget_class)[0]
     retain_idx_test = np.where(targets_test != forget_class)[0]
 
@@ -217,14 +207,6 @@ def train_one_epoch_neggrad(
     epoch,
     forget_lambda=1.0
 ):
-    """
-    NegGrad training epoch.
-
-    Loss = retain_loss - lambda * forget_loss
-
-    Args:
-        forget_lambda: Weight for forget loss
-    """
 
     model.train()
 
@@ -260,8 +242,6 @@ def train_one_epoch_neggrad(
 
         optimizer.zero_grad()
 
-        # ── Retain forward ──
-
         out_r = model(r_imgs)
 
         if isinstance(out_r, tuple):
@@ -272,8 +252,6 @@ def train_one_epoch_neggrad(
             r_labels
         )
 
-        # ── Forget forward ──
-
         out_f = model(f_imgs)
 
         if isinstance(out_f, tuple):
@@ -283,8 +261,6 @@ def train_one_epoch_neggrad(
             out_f,
             f_labels
         )
-
-        # ── NegGrad objective ──
 
         loss = r_loss - forget_lambda * f_loss
 
@@ -342,33 +318,10 @@ def train_one_epoch_neggrad(
 def run_neggrad_unlearning(TRAIN_DATA, TEST_DATA, num_classes, original_ckpt, save_ckpt_path, forget_class, imb_factor, dataset,
                            device, lr=1e-4, epochs=15, batch_size=32,
                            num_workers=4, patience=5, forget_lambda=1.0):
-    """
-    Run NegGrad unlearning on ADVANCE dataset.
-    
-    Args:
-        original_ckpt: Path to original trained model
-        save_ckpt_path: Path to save unlearned model
-        forget_class: Class name to forget (e.g., "airport")
-        device: torch device
-        lr: Learning rate
-        epochs: Max epochs
-        batch_size: Batch size
-        num_workers: DataLoader workers
-        patience: Early stopping patience
-        forget_lambda: Weight for forget loss
-    """
     print("\n" + "="*70)
     print("BUILDING DATASETS")
     print("="*70)
-    
-    # Get splits
-    # forget_train, forget_val, forget_test = get_forget_splits(
-    #     forget_class=forget_class, val_ratio=0.2, test_ratio=0.1, seed=42
-    # )
-    # retain_train, retain_val, retain_test = get_retain_splits(
-    #     forget_class=forget_class, val_ratio=0.2, test_ratio=0.1, seed=42
-    # )
-    
+        
     forget_train, forget_val, forget_test, retain_train, retain_val, retain_test, num_classes = get_forget_retain_splits(TRAIN_DATA, TEST_DATA, num_classes, dataset=dataset, imb_factor=imb_factor, forget_class=forget_class)
     
     print(f"\n  Forget class: {forget_class}")
@@ -379,7 +332,7 @@ def run_neggrad_unlearning(TRAIN_DATA, TEST_DATA, num_classes, original_ckpt, sa
     print(f"  Retain val  : {len(retain_val)}")
     print(f"  Retain test : {len(retain_test)}")
     
-    # Create dataloaders
+    
     forget_train_loader = DataLoader(forget_train, batch_size=batch_size, 
                                      shuffle=True, num_workers=num_workers)
     forget_test_loader = DataLoader(forget_test, batch_size=batch_size,
@@ -389,7 +342,6 @@ def run_neggrad_unlearning(TRAIN_DATA, TEST_DATA, num_classes, original_ckpt, sa
     retain_test_loader = DataLoader(retain_test, batch_size=batch_size,
                                     shuffle=False, num_workers=num_workers)
     
-    # Combined validation set
     from torch.utils.data import ConcatDataset
     val_dataset = ConcatDataset([forget_val, retain_val])
     val_loader = DataLoader(val_dataset, batch_size=batch_size,
@@ -399,18 +351,10 @@ def run_neggrad_unlearning(TRAIN_DATA, TEST_DATA, num_classes, original_ckpt, sa
     print("LOADING ORIGINAL MODEL")
     print("="*70)
     
-    # model = torchvision.models.resnet50(weights=None)
-    # model.conv1 = nn.Conv2d(
-    # 3, 64, kernel_size=3, stride=1, padding=1, bias=False
-    # )
-    # model.maxpool = nn.Identity()
-    # model.fc = nn.Linear(model.fc.in_features, 100)
     model = load_model(dataset, num_classes)
     model.load_state_dict(torch.load(original_ckpt, map_location=device))
     model = model.to(device)
 
-    
-    # model = load_model(original_ckpt, NUM_CLASSES, device)
     
     print("\nEvaluating BEFORE unlearning...")
     matrix_before = evaluate_split(model, forget_test_loader, retain_test_loader, device)
@@ -427,7 +371,6 @@ def run_neggrad_unlearning(TRAIN_DATA, TEST_DATA, num_classes, original_ckpt, sa
     matrix_full = evaluate_split(model, forget_test_loader, full_loader, device)
     print_accuracy_matrix(matrix_full, title="FULL TEST")
     
-    # Setup optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     
@@ -449,7 +392,6 @@ def run_neggrad_unlearning(TRAIN_DATA, TEST_DATA, num_classes, original_ckpt, sa
                                optimizer, device, epoch, forget_lambda)
         scheduler.step()
         
-        # Validate on retain set only (we want to preserve retain performance)
         matrix_val = evaluate_split(model, forget_test_loader, retain_test_loader, device)
         print_accuracy_matrix(matrix_val, title=f"EPOCH {epoch} — Test Set")
         
@@ -471,22 +413,12 @@ def run_neggrad_unlearning(TRAIN_DATA, TEST_DATA, num_classes, original_ckpt, sa
         else:
             patience_count += 1
 
-            # print(
-            #     f"  No improvement. "
-            #     f"Patience {patience_count}/{patience}"
-            # )
-            
-            # if patience_count >= patience:
-            #     print(f"\n  Early stopping at epoch {epoch}.")
-            #     print(f"  Best: epoch {best_epoch}, retain_fusion={best_retain_acc:.2f}%")
-            #     break
     
     print("\n" + "="*70)
     print(f"TRAINING COMPLETED!")
     print(f"Best epoch: {best_epoch}  |  Best retain acc: {best_retain_acc:.2f}%")
     print("="*70)
     
-    # Load best checkpoint for final evaluation
     print("\nLoading best checkpoint for final evaluation...")
     model.load_state_dict(torch.load(save_ckpt_path, map_location=device))
     
@@ -529,7 +461,7 @@ def main():
         TEST_DATA=TEST_DATA,
         num_classes=num_classes,
         original_ckpt=TEACHER_PATH,
-        save_ckpt_path=f"/export/home/achyut/Simarjeet/MUL/Models/Neggrad/{dataset}/neggrad_im{imb_factor}_cls{forget_class}.pth",
+        save_ckpt_path=f"MUL/Models/Neggrad/{dataset}/neggrad_im{imb_factor}_cls{forget_class}.pth",
         forget_class=forget_class,
         dataset=dataset,
         imb_factor=imb_factor,

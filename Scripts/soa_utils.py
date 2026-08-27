@@ -1,9 +1,3 @@
-"""
-Base Utilities for ADVANCE Unlearning Experiments
-==================================================
-Common helper functions used across all unlearning methods.
-"""
-
 import os
 import sys
 import torch

@@ -1,45 +1,3 @@
-"""
-SCRUB: SCalable Remembering and Unlearning unBound
-(Kurmanji, Triantafillou, Hayes, Triantafillou — NeurIPS 2023,
- "Towards Unbounded Machine Unlearning", arXiv:2302.09880)
-
-Self-contained, faithful reimplementation of SCRUB (Algorithms 1-3) + optional
-SCRUB+R rewind (Sec 3.2), wired into the SAME harness as the user's KD script and
-the DEEPU / SalUn / DELETE / UL baselines, so methods differ ONLY in the mechanism.
-
-CORE METHOD (unchanged, per the paper's pseudocode)
----------------------------------------------------
-  teacher w^o = frozen original; student w^u initialised to w^o.
-  d(x) = KL( softmax(f(x; w^o)) || softmax(f(x; w^u)) )        (teacher||student)
-
-  DO-MAX-EPOCH (Alg 2): one epoch over D_f, ASCEND d  ->  push student away from
-      teacher on forget:   w <- w + eps * grad d(x_f)     (i.e. minimise -d)
-  DO-MIN-EPOCH (Alg 3): one epoch over D_r, DESCEND  alpha*d(x_r) + gamma*CE(x_r,y_r):
-      w <- w - eps * grad [ alpha*d(x_r) + gamma*CE ]      (stay close + task loss)
-
-  SCHEDULE (Alg 1): for step i in range(total):
-      if i < max_steps:  DO-MAX-EPOCH
-      DO-MIN-EPOCH                                          (min-steps continue after
-                                                            max-steps stop -> restore retain)
-  Optimizer: SGD/Adam, lr 5e-4 decayed x0.1 (paper); alpha, gamma are hyperparameters.
-
-SCRUB+R (optional --scrub-rewind): checkpoint every epoch; build a same-class
-  validation set (held-out test images of the forget class); rewind to the checkpoint
-  whose forget-set error is closest to that validation error. Useful for the MIA/privacy
-  column; for the forgetting table you typically want plain SCRUB (max forget error).
-
-HELD IDENTICAL TO THE OTHER BASELINES
--------------------------------------
-  Architecture, teacher checkpoint theta_o, loaders, forget-class resolution, seeding,
-  evaluation protocol, and the shared results CSV.
-
-USAGE (reuses your config matrix; extra flags from other methods are ignored)
------------------------------------------------------------------------------
-  python scrub.py --dataset cifar10 --imb-factor 100 --forget-class head \
-                  --clustering-type manual --seed 18 \
-                  --scrub-max-steps 3 --scrub-min-steps 4 --scrub-alpha 1.0 --scrub-gamma 1.0
-"""
-
 import os
 import copy
 import time
@@ -57,14 +15,10 @@ from torchvision import models
 from utils import data_loaders, process_args
 
 
-# ----------------------------------------------------------------------------- #
-#  CORE SCRUB losses  (d = KL(teacher || student))                               #
-# ----------------------------------------------------------------------------- #
 def kl_teacher_student(student_logits, teacher_logits):
     """d(x) = KL( softmax(teacher) || softmax(student) ), averaged over the batch."""
     p_teacher = F.softmax(teacher_logits, dim=1)
     log_p_student = F.log_softmax(student_logits, dim=1)
-    # KLDivLoss(input=log q, target=p) = sum p (log p - log q) = KL(p||q), p=teacher
     return F.kl_div(log_p_student, p_teacher, reduction="batchmean")
 
 
@@ -76,14 +30,13 @@ def do_max_epoch(student, teacher, forget_loader, optimizer, device):
         with torch.no_grad():
             t_logits = teacher(images)
         s_logits = student(images)
-        loss = -kl_teacher_student(s_logits, t_logits)   # ascend d
+        loss = -kl_teacher_student(s_logits, t_logits) 
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
 
 
 def do_min_epoch(student, teacher, retain_loader, optimizer, device, alpha, gamma):
-    """Algorithm 3: descend alpha*d + gamma*CE on D_r (stay close + task loss)."""
     student.train()
     ce = nn.CrossEntropyLoss()
     for images, labels in retain_loader:
@@ -97,9 +50,6 @@ def do_min_epoch(student, teacher, retain_loader, optimizer, device, alpha, gamm
         optimizer.step()
 
 
-# ----------------------------------------------------------------------------- #
-#  Harness helpers  (identical to the other baselines)                           #
-# ----------------------------------------------------------------------------- #
 def setup(dataset, forget_class, clustering_type, pipeline, SEED):
     random.seed(SEED); np.random.seed(SEED)
     torch.manual_seed(SEED); torch.cuda.manual_seed(SEED)
@@ -274,9 +224,6 @@ def append_result_csv(csv_path, row):
     print(f"Appended result to {csv_path}")
 
 
-# ----------------------------------------------------------------------------- #
-#  SCRUB run  (Algorithm 1 schedule + optional +R rewind)                        #
-# ----------------------------------------------------------------------------- #
 def run_scrub(student, teacher, forget_loader, retain_loader, device,
               max_steps, min_steps, alpha, gamma, lr, momentum, weight_decay,
               decay_after, optimizer_name, rewind, fval_loader, fforget_loader):
@@ -316,7 +263,6 @@ def run_scrub(student, teacher, forget_loader, retain_loader, device,
     return student
 
 
-# ----------------------------------------------------------------------------- #
 def parse_args():
     p = argparse.ArgumentParser(description="SCRUB class-level machine unlearning")
     p.add_argument("--imb-factor", default="200")
@@ -325,7 +271,6 @@ def parse_args():
     p.add_argument("--clustering-type", default="manual", help="only used to resolve the forget-class index")
     p.add_argument("--seed", type=int, default=18)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    # SCRUB hyperparameters (defaults follow the paper's class-unlearning setup)
     p.add_argument("--scrub-max-steps", type=int, default=3, help="# max-epochs (Alg 1); paper class: 2-3")
     p.add_argument("--scrub-min-steps", type=int, default=4, help="# min-epochs (Alg 1); paper class: 3-4")
     p.add_argument("--scrub-alpha", type=float, default=1.0, help="weight on KL(teacher||student) in min-step")

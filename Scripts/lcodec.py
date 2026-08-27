@@ -1,66 +1,3 @@
-"""
-L-CODEC (CR variant): Deep Unlearning via Randomized Conditionally Independent Hessians
-(Mehta, Pal, Singh, Ravi — CVPR 2022)
-
-Self-contained, faithful reimplementation of the authors' released pipeline
-(vsingh-group/LCODEC-deep-unlearning), CR ("naive-Newton / certified-removal")
-update variant, wired into the SAME experimental harness as the user's KD script
-and the DEEPU / SalUn / DELETE baselines so methods differ ONLY in the mechanism.
-
-WHY THE CR VARIANT
-------------------
-The faithful "Sekhari" update (paper Eq. 15) needs gradients/params checkpointed
-from the last two training epochs of the ORIGINAL run (getOldPandG in the repo).
-Those are training-time artifacts that don't exist here. The authors' code ships a
-second, self-contained update -- CR_NaiveNewton -- that uses the SAME L-FOCI
-selection and the SAME finite-difference *sample* Hessian, but no stored old-Hessian
-and no DP noise:   w'_P = w_P + H_P^{-1} g_P   on the selected block only.
-This runs today with no training-time artifacts and is a genuine variant from the
-released code (params.HessType == 'CR'), not a mislabel.
-
-FAITHFULLY PORTED FROM THE AUTHORS' REPO
-----------------------------------------
-  * OneNN_Torch, codec2, codec3            (codec/neighbors.py, codec/torch_codec.py)
-  * foci / cheap_foci                       (codec/torch_foci.py)
-  * ActivationsHook  (Linear: mean over batch; Conv: mean over batch+spatial)
-                                            (scrub/hypercolumn.py)
-  * input perturbation loop  x + noise*randn, collect (activations, losses)
-                                            (scrub/scrub_tools.py inp_perturb)
-  * reverseLinearIndexingToLayers, getVectorizedGrad, updateModelParams
-                                            (scrub/scrub_tools.py, scrub/grad_utils.py)
-  * finite-difference Hessian (FD): outer(dg) / ||dw||_1
-                                            (scrub/grad_utils.py getHessian)
-  * CR_NaiveNewton: w + solve(H + l2*I, g)  (scrub/scrub_tools.py)
-
-ONE DELIBERATE, DISCLOSED DEVIATION
------------------------------------
-The released FD line reuses sampGrad1 for the "stepped" gradient, so its
-finite-difference Hessian collapses to ZERO (an apparent bug). We implement the
-paper's INTENDED Eq.-15 finite difference instead: grad at w vs grad at w after one
-SGD step (fd_lr), params w1 vs w2. Reproducing the zero-Hessian bug would make the
-method meaningless.
-
-ADAPTATION TO CLASS FORGETTING
-------------------------------
-The paper unlearns one sample at a time; the repo also supports batch-level scrubbing
-(scrub_batch_size) where the hooks average activations over the batch. For class
-forgetting we iterate over batches of the forget class, applying the select+scrub
-update per batch (each batch is the "z'"). Cap with --lcodec-max-batches.
-
-HELD IDENTICAL TO THE OTHER BASELINES
--------------------------------------
-  Architecture (resnet18/50 + CIFAR conv1/maxpool tweak + fc->num_classes), teacher
-  checkpoint theta_o, loaders, forget-class resolution, seeding, and the evaluation
-  protocol are the same as DEEPU / SalUn / DELETE and consistent with the KD harness.
-
-USAGE (reuses your config matrix; extra --deepu-*/--salun-*/--delete-* flags ignored)
-------------------------------------------------------------------------------------
-  python lcodec.py --dataset cifar10 --imb-factor 100 --forget-class head \
-                   --clustering-type manual --seed 18 \
-                   --lcodec-perturbations 100 --lcodec-selection foci \
-                   --lcodec-l2 0.01 --lcodec-fd-lr 1e-3
-"""
-
 import os
 import copy
 import time
@@ -78,9 +15,7 @@ from torchvision import models
 from utils import data_loaders, process_args
 
 
-# =========================================================================== #
-#  Ported CODEC / FOCI core  (codec/neighbors.py, torch_codec.py, torch_foci.py)
-# =========================================================================== #
+
 def OneNN_Torch(X, p=2):
     if X.dim() == 1:
         X = X.view(-1, 1)
@@ -90,7 +25,6 @@ def OneNN_Torch(X, p=2):
 
 
 def codec2(Z, Y):
-    """Chatterjee/CODEC dependence of Y on Z (unconditional)."""
     if Z.dim() == 1:
         Z = Z.reshape(-1, 1)
     if Y.dim() == 2 and Y.shape[1] == 1:
@@ -108,7 +42,6 @@ def codec2(Z, Y):
 
 
 def codec3(Z, Y, X):
-    """CODEC dependence of Y on Z given X (conditional)."""
     if Z.dim() == 1:
         Z = Z.view(-1, 1)
     if X.dim() == 1:
@@ -134,7 +67,6 @@ def codec3(Z, Y, X):
 
 
 def foci(X, Y, earlyStop=True, verbose=False):
-    """L-FOCI feature ordering: greedily build the sufficient (Markov-blanket) set."""
     p = X.shape[1]
     maxval = -100.0
     maxind = None
@@ -173,7 +105,6 @@ def foci(X, Y, earlyStop=True, verbose=False):
 
 
 def cheap_foci(X, Y):
-    """Top-1 most-dependent slice only (fast path for very wide layers)."""
     p = X.shape[1]
     maxval = -100.0
     maxind = None
@@ -185,9 +116,6 @@ def cheap_foci(X, Y):
     return [maxind], [float(maxval)]
 
 
-# =========================================================================== #
-#  Activation hooks  (scrub/hypercolumn.py ActivationsHook)                    #
-# =========================================================================== #
 class ActivationsHook(nn.Module):
     def __init__(self, model):
         super().__init__()
@@ -208,10 +136,10 @@ class ActivationsHook(nn.Module):
         return self.layers
 
     def _linear_hook(self, module, inp, out):
-        self.activations.append(out.mean(dim=[0]))          # mean over batch
+        self.activations.append(out.mean(dim=[0]))         
 
     def _conv_hook(self, module, inp, out):
-        self.activations.append(out.mean(dim=[0, 2, 3]))    # mean over batch + spatial
+        self.activations.append(out.mean(dim=[0, 2, 3]))   
 
     def getActivations(self, x):
         self.activations = []
@@ -223,9 +151,6 @@ class ActivationsHook(nn.Module):
             h.remove()
 
 
-# =========================================================================== #
-#  Slice<->layer indexing, grad extraction, update  (scrub_tools / grad_utils) #
-# =========================================================================== #
 def reverseLinearIndexingToLayers(selectedSlices, torchLayers):
     ind_list = []
     for myslice in selectedSlices:
@@ -280,7 +205,6 @@ def updateModelParams(updatedParams, reversalDict, model):
 
 
 def getHessian_FD(dw1, dw2, w1, w2, hessian_device='cpu'):
-    """Finite-difference Hessian: outer(dg) / ||dw||_1   (grad_utils.getHessian, FD)."""
     dw1 = dw1.to(hessian_device); dw2 = dw2.to(hessian_device)
     w1 = w1.to(hessian_device);   w2 = w2.to(hessian_device)
     grad_diff_outer = torch.einsum('p,q->pq', (dw1 - dw2), (dw1 - dw2))
@@ -290,19 +214,14 @@ def getHessian_FD(dw1, dw2, w1, w2, hessian_device='cpu'):
 
 
 def CR_NaiveNewton(weight, grad, hessian, l2lambda=0.01, hessian_device='cpu'):
-    """w' = w + (H + l2 I)^{-1} g   (scrub_tools.CR_NaiveNewton)."""
     original_device = weight.device
     H = hessian.to(hessian_device) + l2lambda * torch.eye(hessian.shape[0], device=hessian_device)
     newton = torch.linalg.solve(H, grad.to(hessian_device)).to(original_device)
     return weight + newton     # removal = positive-gradient (ascent) direction
 
 
-# =========================================================================== #
-#  One scrub step over a forget batch  (adapted inp_perturb, CR path)          #
-# =========================================================================== #
 def lcodec_scrub_batch(model, x, y, criterion, device, n_perturbations, noise_std,
                        selection, l2lambda, fd_lr, hessian_device, max_slice_params):
-    # ---- 1. input perturbation -> (activations, losses) ----
     hook = ActivationsHook(model)
     torch_layers = hook.getLayers()
     acts_list, losses = [], []
@@ -313,11 +232,10 @@ def lcodec_scrub_batch(model, x, y, criterion, device, n_perturbations, noise_st
         loss = criterion(out, y)
         acts_list.append(p2v(acts).detach())
         losses.append(loss.detach())
-    acts = torch.vstack(acts_list)                     # (m, P_slices)
-    losses = torch.stack(losses).to(device)            # (m,)
+    acts = torch.vstack(acts_list)                    
+    losses = torch.stack(losses).to(device)           
     hook.clearHooks()
 
-    # ---- 2. slice selection ----
     P = acts.shape[1]
     if selection == 'full':
         selected = list(range(P))
@@ -328,11 +246,10 @@ def lcodec_scrub_batch(model, x, y, criterion, device, n_perturbations, noise_st
         selected = np.random.permutation(P)[:max(1, len(sel_full))].tolist()
     elif selection == 'cheap':
         selected, _ = cheap_foci(acts, losses)
-    else:  # 'foci'
+    else: 
         selected, _ = foci(acts, losses, earlyStop=True)
     slices_to_update = reverseLinearIndexingToLayers(selected, torch_layers)
 
-    # ---- 3. sample gradient at w  (vectGrad1, vectParams1) ----
     model.eval()
     model.zero_grad(set_to_none=True)
     out = model(x)
@@ -346,24 +263,21 @@ def lcodec_scrub_batch(model, x, y, criterion, device, n_perturbations, noise_st
     if n_sel_params == 0:
         return float(loss_before.item()), 0
     if n_sel_params > max_slice_params:
-        # Newton solve is O(k^3); guard pathological selections
         print(f"    [skip] selected block too large ({n_sel_params} > {max_slice_params} params)")
         return float(loss_before.item()), 0
 
-    # ---- 4. grad at w' after one SGD step  (paper Eq.15 finite difference) ----
     model_copy = copy.deepcopy(model)
     layers_copy = [m for m in model_copy.modules() if isinstance(m, (nn.Linear, nn.Conv2d))]
     slices_copy = reverseLinearIndexingToLayers(selected, layers_copy)
     opt_copy = optim.SGD(model_copy.parameters(), lr=fd_lr)
     model_copy.eval()
     out_c = model_copy(x); loss_c = criterion(out_c, y)
-    opt_copy.zero_grad(); loss_c.backward(); opt_copy.step()          # one step -> w'
+    opt_copy.zero_grad(); loss_c.backward(); opt_copy.step()         
     out_c = model_copy(x); loss_c = criterion(out_c, y)
-    opt_copy.zero_grad(); loss_c.backward()                          # grad at w'
+    opt_copy.zero_grad(); loss_c.backward()                          
     grads2 = getGradObjs(model_copy)
     vectGrad2, vectParams2, _ = getVectorizedGrad(grads2, slices_copy, device)
 
-    # ---- 5. finite-difference Hessian + CR naive-Newton update ----
     H = getHessian_FD(vectGrad1, vectGrad2, vectParams1, vectParams2, hessian_device)
     updated = CR_NaiveNewton(vectParams1, vectGrad1, H, l2lambda=l2lambda,
                              hessian_device=hessian_device)
@@ -373,10 +287,6 @@ def lcodec_scrub_batch(model, x, y, criterion, device, n_perturbations, noise_st
     model.zero_grad(set_to_none=True)
     return float(loss_before.item()), n_sel_params
 
-
-# =========================================================================== #
-#  Harness: setup / build_model / get_targets / evaluate  (as other baselines) #
-# =========================================================================== #
 def setup(dataset, forget_class, clustering_type, pipeline, SEED):
     random.seed(SEED); np.random.seed(SEED)
     torch.manual_seed(SEED); torch.cuda.manual_seed(SEED)
@@ -504,7 +414,6 @@ def evaluate(model, test_loader, device, num_classes, forget_class):
     return forget_acc, retain_acc
 
 
-# =========================================================================== #
 def parse_args():
     p = argparse.ArgumentParser(description="L-CODEC (CR variant) class-level machine unlearning")
     p.add_argument("--imb-factor", default="200")
@@ -524,13 +433,11 @@ def parse_args():
     p.add_argument("--lcodec-hessian-device", default="cpu", help="'cpu' or 'cuda' for the Newton solve")
     p.add_argument("--lcodec-max-slice-params", type=int, default=20000,
                    help="skip a batch if its selected block exceeds this many params (Newton is O(k^3))")
-    p.add_argument("--csv", default="/export/home/achyut/Simarjeet/MUL/Schedulers/food101/unlearning_results.csv",
+    p.add_argument("--csv", default="MUL/Schedulers/food101/unlearning_results.csv",
                    help="append a results row to this CSV (shared schema across methods; '' disables)")
     return p.parse_known_args()
 
 
-# Shared, method-agnostic results schema. Every baseline can append to the same
-# file so results accumulate into one table (method column distinguishes rows).
 CSV_FIELDS = [
     "timestamp", "method", "dataset", "imb_factor", "forget_class",
     "clustering_type", "seed", "forget_acc", "retain_acc", "ua",
@@ -539,7 +446,6 @@ CSV_FIELDS = [
 
 
 def append_result_csv(csv_path, row):
-    """Append one result row, writing the header if the file is new/empty."""
     if not csv_path:
         return
     import csv
@@ -583,7 +489,6 @@ def main():
     forget_loader = forget_loader_from_train(train_loader, forget_class, batch_size)
     criterion = nn.CrossEntropyLoss()
 
-    # --- L-CODEC (CR) scrub over forget-class batches ---
     t0 = time.perf_counter()
     n_done = 0
     for bidx, (x, y) in enumerate(forget_loader):
@@ -610,7 +515,6 @@ def main():
     torch.save(model.state_dict(), save_path)
     print(f"\nSaved unlearned model to: {save_path}")
 
-    # --- append a row to the shared results CSV ---
     import datetime
     hyper = (f"selection={args.lcodec_selection};perturb={args.lcodec_perturbations};"
              f"noise_std={args.lcodec_noise_std};l2={args.lcodec_l2};fd_lr={args.lcodec_fd_lr};"

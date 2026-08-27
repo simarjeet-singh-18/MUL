@@ -1,35 +1,3 @@
-"""
-UL (Uncertainty Learning) Unlearning  -- unimodal, harness-matched
-==================================================================
-Push the model toward maximum uncertainty on forget samples via KL divergence to
-the uniform distribution. Fine-tunes on the FORGET SET ONLY (no retain data, no
-true labels). Core objective identical to the original ADVANCE UL script; only the
-interface is adapted to the single-head long-tailed harness used by the other
-baselines (DEEPU / SalUn / DELETE / L-CODEC).
-
-CORE UNLEARNING LOGIC (unchanged)
----------------------------------
-  uncertainty_loss(logits) = KL(uniform || softmax(logits))
-      uniform  = full_like(softmax(logits), 1/num_classes).detach()
-      loss     = KLDivLoss(reduction='batchmean')(log_softmax(logits), uniform)
-  Training: forget set only, Adam, CosineAnnealingLR(T_max=epochs), early stopping
-  on best retain accuracy with patience; best checkpoint reloaded at the end.
-  (The original summed this loss over three logits heads; a single-head model has
-   one output, so the same objective is applied to that one head.)
-
-HELD IDENTICAL TO THE OTHER BASELINES
--------------------------------------
-  Architecture (resnet18/50 + CIFAR conv1/maxpool tweak + fc->num_classes), teacher
-  checkpoint theta_o, loaders, forget-class resolution, seeding, evaluation protocol,
-  and the shared results CSV.
-
-USAGE (reuses your config matrix; extra flags from other methods are ignored)
------------------------------------------------------------------------------
-  python ul.py --dataset cifar10 --imb-factor 100 --forget-class head \
-               --clustering-type manual --seed 18 \
-               --ul-lr 1e-5 --ul-epochs 15 --ul-patience 3
-"""
-
 import os
 import time
 import random
@@ -44,12 +12,7 @@ from torchvision import models
 
 from utils import data_loaders, process_args
 
-
-# ----------------------------------------------------------------------------- #
-#  CORE UL LOSS  (unchanged from the original script)                            #
-# ----------------------------------------------------------------------------- #
 def uncertainty_loss(logits, num_classes):
-    """KL divergence between model output and the uniform distribution."""
     uniform = torch.full_like(
         torch.softmax(logits, dim=1),
         fill_value=1.0 / num_classes
@@ -60,18 +23,17 @@ def uncertainty_loss(logits, num_classes):
 
 
 def train_one_epoch_UL(model, forget_loader, optimizer, device, epoch, num_classes):
-    """UL training epoch. Only forget set is used. No retain set, no true labels."""
     model.train()
     total_loss = 0.0
     total_samples = 0
     total_max_prob = 0.0
 
-    for images, _labels in forget_loader:      # labels intentionally unused
+    for images, _labels in forget_loader:   
         images = images.to(device)
         optimizer.zero_grad()
 
         logits = model(images)
-        loss = uncertainty_loss(logits, num_classes)   # single head (same objective)
+        loss = uncertainty_loss(logits, num_classes) 
 
         loss.backward()
         optimizer.step()
@@ -92,9 +54,6 @@ def train_one_epoch_UL(model, forget_loader, optimizer, device, epoch, num_class
     print(f"    Gap from perfect     : {abs(avg_max_prob - perfect):.4f}")
 
 
-# ----------------------------------------------------------------------------- #
-#  Harness helpers  (identical to the other baselines)                           #
-# ----------------------------------------------------------------------------- #
 def setup(dataset, forget_class, clustering_type, pipeline, SEED):
     random.seed(SEED); np.random.seed(SEED)
     torch.manual_seed(SEED); torch.cuda.manual_seed(SEED)
@@ -223,8 +182,6 @@ def evaluate(model, test_loader, device, num_classes, forget_class, verbose=True
         print(f"Retain Accuracy (mean over non-forget classes): {retain_acc:.2f}%")
     return forget_acc, retain_acc
 
-
-# Shared, method-agnostic results schema (same as the other baselines).
 CSV_FIELDS = [
     "timestamp", "method", "dataset", "imb_factor", "forget_class",
     "clustering_type", "seed", "forget_acc", "retain_acc", "ua",
@@ -248,9 +205,6 @@ def append_result_csv(csv_path, row):
     print(f"Appended result to {csv_path}")
 
 
-# ----------------------------------------------------------------------------- #
-#  UL run  (training loop / early-stopping logic preserved from the original)    #
-# ----------------------------------------------------------------------------- #
 def run_UL(model, forget_loader, test_loader, device, num_classes, forget_class,
            save_path, lr, epochs, patience):
     optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -266,7 +220,6 @@ def run_UL(model, forget_loader, test_loader, device, num_classes, forget_class,
         train_one_epoch_UL(model, forget_loader, optimizer, device, epoch, num_classes)
         scheduler.step()
 
-        # early-stop selection on retain accuracy (quiet eval each epoch)
         _fa, retain_acc = evaluate(model, test_loader, device, num_classes, forget_class, verbose=False)
         print(f"  [epoch {epoch}] retain acc = {retain_acc:.2f}%")
 
@@ -283,13 +236,10 @@ def run_UL(model, forget_loader, test_loader, device, num_classes, forget_class,
                 print(f"\n  Early stopping at epoch {epoch}.")
                 break
 
-    # reload best checkpoint
     model.load_state_dict(best_state)
     print(f"\nRestored best epoch {best_epoch} (retain={best_retain_acc:.2f}%)")
     return model, best_epoch
 
-
-# ----------------------------------------------------------------------------- #
 def parse_args():
     p = argparse.ArgumentParser(description="UL (uncertainty learning) class-level machine unlearning")
     p.add_argument("--imb-factor", default="200")
@@ -298,12 +248,11 @@ def parse_args():
     p.add_argument("--clustering-type", default="manual", help="only used to resolve the forget-class index")
     p.add_argument("--seed", type=int, default=18)
     p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    # UL hyperparameters (defaults match the original script's __main__ call)
     p.add_argument("--ul-lr", type=float, default=1e-5, help="Adam learning rate")
     p.add_argument("--ul-epochs", type=int, default=15, help="max UL epochs")
     p.add_argument("--ul-patience", type=int, default=3, help="early-stopping patience on retain acc")
     p.add_argument("--ul-batch-size", type=int, default=32)
-    p.add_argument("--csv", default="/export/home/achyut/Simarjeet/results/ul.csv",
+    p.add_argument("--csv", default="results/ul.csv",
                    help="append a results row to this CSV (shared schema; '' disables)")
     return p.parse_known_args()
 
@@ -353,7 +302,6 @@ def main():
     torch.save(model.state_dict(), save_path)
     print(f"\nSaved unlearned model to: {save_path}")
 
-    # --- append a row to the shared results CSV ---
     import datetime
     hyper = (f"lr={args.ul_lr};epochs={args.ul_epochs};patience={args.ul_patience};"
              f"batch_size={batch_size};best_epoch={best_epoch}")
